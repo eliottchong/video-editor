@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Editor</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f1115;
+      color: #e8eaed;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: 100%;
+      max-width: 520px;
+      background: #1a1d24;
+      border: 1px solid #2a2f3a;
+      border-radius: 12px;
+      padding: 28px;
+    }
+    h1 {
+      margin: 0 0 24px;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.875rem;
+      color: #9aa0a6;
+    }
+    .field { margin-bottom: 20px; }
+    input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      background: #0f1115;
+      border: 1px dashed #3c4454;
+      border-radius: 8px;
+      color: #e8eaed;
+      cursor: pointer;
+    }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 12px;
+      background: #0f1115;
+      border: 1px solid #3c4454;
+      border-radius: 8px;
+      color: #e8eaed;
+      font: inherit;
+      resize: vertical;
+    }
+    textarea:focus, input:focus { outline: 2px solid #5b8def; outline-offset: 1px; }
+    button {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 8px;
+      background: #5b8def;
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) { background: #4a7de0; }
+    #download-btn {
+      display: none;
+      margin-top: 16px;
+      background: #2d6a4f;
+      text-align: center;
+      text-decoration: none;
+    }
+    #download-btn:hover { background: #40916c; }
+    #status {
+      margin-top: 16px;
+      font-size: 0.875rem;
+      color: #9aa0a6;
+      min-height: 1.25rem;
+    }
+    #status.error { color: #f28b82; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Video Editor</h1>
+    <form id="form">
+      <div class="field">
+        <label for="video">Reference MP4 (optional)</label>
+        <input type="file" id="video" name="video" accept="video/mp4,.mp4" />
+      </div>
+      <div class="field">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" name="prompt" placeholder="Describe the video you want to generate..." required></textarea>
+      </div>
+      <button type="submit" id="submit-btn">Generate</button>
+    </form>
+    <p id="status"></p>
+    <a id="download-btn" download="generated_video.mp4">Download output</a>
+  </main>
+
+  <script>
+    const form = document.getElementById("form");
+    const status = document.getElementById("status");
+    const submitBtn = document.getElementById("submit-btn");
+    const downloadBtn = document.getElementById("download-btn");
+
+    let outputUrl = null;
+
+    function setStatus(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+
+    function resetDownload() {
+      if (outputUrl) {
+        URL.revokeObjectURL(outputUrl);
+        outputUrl = null;
+      }
+      downloadBtn.style.display = "none";
+      downloadBtn.removeAttribute("href");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      resetDownload();
+
+      const prompt = document.getElementById("prompt").value.trim();
+      if (!prompt) {
+        setStatus("Enter a prompt.", true);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("prompt", prompt);
+
+      const videoInput = document.getElementById("video");
+      if (videoInput.files[0]) {
+        formData.append("video", videoInput.files[0]);
+      }
+
+      submitBtn.disabled = true;
+      setStatus("Generating video — this may take several minutes...");
+
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const detail = await response.json().catch(() => ({}));
+          throw new Error(detail.detail || `Request failed (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        outputUrl = URL.createObjectURL(blob);
+        downloadBtn.href = outputUrl;
+        downloadBtn.style.display = "block";
+        setStatus("Done. Click below to download your video.");
+      } catch (err) {
+        setStatus(err.message || "Something went wrong.", true);
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
